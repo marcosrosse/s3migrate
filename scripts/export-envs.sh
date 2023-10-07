@@ -1,0 +1,9 @@
+echo export S3_ENDPOINT=
+echo export S3_ACCESS_KEY_ID=
+echo export S3_SECRET_ACCESS_KEY=
+echo export S3_USE_SSL=
+echo export POSTGRES_HOST=
+echo export POSTGRES_PORT=
+echo export POSTGRES_USERNAME=
+echo export POSTGRES_PASSWORD=
+echo export POSTGRES_DBNAME=

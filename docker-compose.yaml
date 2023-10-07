@@ -1,0 +1,17 @@
+services:
+  minio:
+    image: quay.io/minio/minio:latest
+    command: ["server", "data", "--console-address", ":9001"]
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  postgres:
+    image: docker.io/library/postgres:latest
+    volumes:
+      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:rw,z
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=postgres
+    ports:
+      - "5432:5432"
