@@ -6,8 +6,8 @@ import (
 	"log"
 	"strings"
 
-	"github.com/marcosrosse/copys3files/internal/database"
-	"github.com/marcosrosse/copys3files/internal/s3"
+	"github.com/marcosrosse/s3migrate/internal/database"
+	"github.com/marcosrosse/s3migrate/internal/s3"
 )
 
 var (

@@ -1,4 +1,4 @@
-module github.com/marcosrosse/copys3files
+module github.com/marcosrosse/s3migrate
 
 go 1.21.0
 
