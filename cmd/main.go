@@ -1,9 +1,9 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/marcosrosse/s3migrate/internal/database"
@@ -11,25 +11,14 @@ import (
 )
 
 var (
-    srcBucket *string
-    dstBucket *string
-    srcPath *string
-    dstPath *string
+	srcBucket = os.Getenv("S3_SRC_BUCKET")
+	dstBucket = os.Getenv("S3_DST_BUCKET")
+	srcPath   = os.Getenv("S3_SRC_PATH_OBJ")
+	dstPath   = os.Getenv("S3_DST_PATH_OBJ")
 )
 
-
-func init (){
-    //TODO: Implement a verification if the flag is realy parsed
-	srcBucket = flag.String("src-bucket", "legacy-s3", "The source bucket where the legacy files are stored.")
-	dstBucket = flag.String("dst-bucket", "production-s3", "The destination bucket where the files will be placed.")
-	srcPath = flag.String("src-path", "/image", "Source files path.")
-	dstPath = flag.String("dst-path", "/avatar", "Destination files path.")
-}
-
 func main() {
-
-    // Flag parse
-    flag.Parse()
+	fmt.Println("Starting Job")
 
 	// To the connectin with the DB
 	db, err := database.ConnDB()
@@ -55,20 +44,20 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		objName := strings.TrimPrefix(path, "image/")
+		objName := strings.TrimPrefix(path, srcPath)
 		legacyObj[id] = objName
 	}
 
 	// Range all key and values base in the id and path from DB
 	for key, value := range legacyObj {
 		// Concatenate path with the image name
-		objSrcName := (*srcPath + value)
-		objDstName := (*dstPath + value)
+		objSrcName := (srcPath + value)
+		objDstName := (dstPath + value)
 
 		// If object didn't exist, copy it to the bucket
-		if obj, _ := s3.ObjExists(*dstBucket, objDstName); !obj {
+		if obj, _ := s3.ObjExists(dstBucket, objDstName); !obj {
 
-			err = s3.CopyObjs(*srcBucket, *dstBucket, objSrcName, objDstName)
+			err = s3.CopyObjs(srcBucket, dstBucket, objSrcName, objDstName)
 
 			if err != nil {
 				fmt.Println("Failed to copy the object", err)
