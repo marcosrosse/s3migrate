@@ -7,3 +7,7 @@ echo export POSTGRES_PORT=5432
 echo export POSTGRES_USERNAME=postgres
 echo export POSTGRES_PASSWORD=postgres
 echo export POSTGRES_DBNAME=proddatabase
+echo export S3_SRC_BUCKET="legacy-s3"
+echo export S3_DST_BUCKET="production-s3"
+echo export S3_SRC_PATH_OBJ="image"
+echo export S3_DST_PATH_OBJ="avatar"
