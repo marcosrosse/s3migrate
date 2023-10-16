@@ -9,9 +9,12 @@ Components and versions:
 - Go version 1.21.0
 - Podman version 4.7.0
 - MinIO container latest version
+- MinIO library v7
 - PostgreSQL container latest version
 
-I created the Postgres and MinIO containers to emulate the AWS S3 Bucket and Production database.
+Postgres and MinIO containers orchestrated to emulate the AWS S3 Bucket and Production database.
+
+The code were written using a method from MinIO to copy object files from a source to a destination, and in the final it update each column in the database.
 
 # How to run
 
@@ -20,13 +23,13 @@ To create the Postgres and MinIO containers, run access the repository root path
 
 ``compose up -d``
 
-Execute the script seed.py + quantity of files to be created in the bucket and database
+Execute the script seed.py + quantity of files to be created in the bucket and database.
 
 ### Build the project
-Source code:
+From source code:
 ``go build -o s3migrate cmd/main.go``
 
-Container image:
+From container image:
 ``podman build -t <REGISTRY URL>/<IMAGE NAME>:<VERSION> -f Dockerfile``
 
 ### Export variables
@@ -36,5 +39,13 @@ Configure the Postgres and Minio/S3 variables with the user, password, host, etc
 #### Binary file:
 After export all variables with the script export-envs.sh running the binary:
 ``./s3migrate``
+
 #### Container image:
 ``podman run -d --network=s3migrate_cli <REGISTRY URL>/<IMAGE NAME>:<VERSION> /s3migrate``
+
+### Considerations:
+This app cli would be deployed in a Kubernetes Job because of it's simplicity and a "one time use" purpose.
+
+Thinking about performance, I would implement a bulk update to update the objects file path in Postgres, because usually databases work better when processing bulk queries.
+
+
