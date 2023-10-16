@@ -1,13 +1,7 @@
 services:
-  minio:
-    image: quay.io/minio/minio:latest
-    command: ["server", "data", "--console-address", ":9001"]
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-
   postgres:
     image: docker.io/library/postgres:latest
+    # hostname: postgres
     volumes:
       - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:rw,z
     environment:
@@ -15,3 +9,62 @@ services:
       - POSTGRES_USER=postgres
     ports:
       - "5432:5432"
+    networks:
+      - cli
+
+
+  minio:
+    image: quay.io/minio/minio:latest
+    # hostname: minio
+    command: ["server", "data", "--console-address", ":9001"]
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    networks:
+      - cli
+
+  # To enable this,  automate the creation of bucket legacy-s3 and production-s3
+  
+  # seeder:
+  #   image: docker.io/marcosrossem/seeder:v1
+  #   depends_on:
+  #     - postgres
+  #     - minio
+  #   links:
+  #     - postgres
+  #     - minio
+  #   networks:
+  #     - cli
+
+
+  # cli:
+  #   image: docker.io/marcosrossem/s3migrate:v1
+  #   command: ["/s3migrate"]
+  #   depends_on:
+  #     - minio
+  #     - postgres
+  #     - seeder
+  #   environment:
+  #     - S3_ACCESS_KEY_ID=minioadmin
+  #     - S3_SECRET_ACCESS_KEY=minioadmin
+  #     - S3_SRC_BUCKET=legacy-s3
+  #     - S3_DST_BUCKET=production-s3
+  #     - S3_SRC_PATH_OBJ=image
+  #     - S3_DST_PATH_OBJ=avatar
+  #     - S3_USE_SSL=false
+  #     - S3_ENDPOINT=minio:9000
+  #     - POSTGRES_HOST=postgres
+  #     - POSTGRES_PORT=5432
+  #     - POSTGRES_USERNAME=postgres
+  #     - POSTGRES_PASSWORD=postgres
+  #     - POSTGRES_DBNAME=proddatabase
+  #   links:
+  #     - postgres
+  #     - minio
+  #   networks:
+  #     - cli
+
+
+networks:
+  cli:
+    driver: bridge
