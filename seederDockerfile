@@ -1,0 +1,11 @@
+FROM python:latest
+
+WORKDIR /app
+
+COPY scripts/requirements.txt .
+
+RUN pip install --no-cache-dir psycopg2 boto3
+
+COPY scripts/seeder.py .
+
+ENTRYPOINT python /app/seeder.py 1000

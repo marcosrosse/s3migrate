@@ -1,0 +1,6 @@
+*.swp
+*.md
+# scripts/
+.git/
+compose.yaml
+
