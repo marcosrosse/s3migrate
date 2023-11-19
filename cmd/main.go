@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/marcosrosse/bucket-migration-tool/internal/database"
@@ -15,40 +14,32 @@ type Avatar struct {
 }
 
 // Maybe here will have all the logic
-func worker(workerId int, msg chan Avatar) {
-	for res := range msg {
-		fmt.Println("Worker: ", workerId, " Msg: ", res)
+func worker(workerId int, jobs chan Avatar) {
+	for j := range jobs {
+		fmt.Println("Worker: ", workerId, "jobs: ", j)
 		time.Sleep(time.Second)
 	}
 
 }
 
 func main() {
-	host := os.Getenv("POSTGRES_HOST")
-	port := os.Getenv("POSTGRES_PORT")
-	username := os.Getenv("POSTGRES_USERNAME")
-	password := os.Getenv("POSTGRES_PASSWORD")
-	dbname := os.Getenv("POSTGRES_DBNAME")
 
-	psqlConn := fmt.Sprintf(
-		"postgres://%s:%s@%s:%s/%s",
-		username, password, host, port, dbname)
-	db := database.ConnDB(psqlConn, 10)
+	db := database.ConnDB()
 
 	var counter int
-	// Comented cause there is to much rows in the table
-	// db.QueryRow(context.Background(), "select count(*) from avatars").Scan(&counter)
-	// fmt.Println("This is the total of rows", counter)
+	db.QueryRow(context.Background(), "select count(*) from avatars").Scan(&counter)
+	defer db.Close(context.Background())
 
-	counter = 40
-	limit := 10
+	limit := 100
 
-	// create the channel msg with the avatar type
-	msg := make(chan Avatar)
+	// create the channel jobs with the avatar type
+	jobs := make(chan Avatar, counter)
 
-	// Start a go routine sending an id and a msg to the worker function
-	go worker(1, msg)
-	go worker(2, msg)
+	// Start a go routine sending an id and a jobs to the worker function
+
+	for w := 1; w <= 10; w++ {
+		go worker(w, jobs)
+	}
 
 	for counter > 0 {
 		page := counter / limit
@@ -68,7 +59,7 @@ func main() {
 				Id:   id,
 				Path: path,
 			}
-			msg <- avatar // Send each line for the message channel
+			jobs <- avatar // Send each line for the message channel
 		}
 
 		counter -= limit
