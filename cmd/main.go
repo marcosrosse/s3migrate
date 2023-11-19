@@ -1,80 +1,79 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"log"
 	"os"
-	"strings"
+	"time"
 
-	"github.com/marcosrosse/s3migrate/internal/database"
-	"github.com/marcosrosse/s3migrate/internal/s3"
+	"github.com/marcosrosse/bucket-migration-tool/internal/database"
 )
 
-var (
-	srcBucket = os.Getenv("S3_SRC_BUCKET")
-	dstBucket = os.Getenv("S3_DST_BUCKET")
-	srcPath   = os.Getenv("S3_SRC_PATH_OBJ")
-	dstPath   = os.Getenv("S3_DST_PATH_OBJ")
-)
+type Avatar struct {
+	Id   int
+	Path string
+}
+
+// Maybe here will have all the logic
+func worker(workerId int, msg chan Avatar) {
+	for res := range msg {
+		fmt.Println("Worker: ", workerId, " Msg: ", res)
+		time.Sleep(time.Second)
+	}
+
+}
 
 func main() {
-	fmt.Println("Starting Job")
+	host := os.Getenv("POSTGRES_HOST")
+	port := os.Getenv("POSTGRES_PORT")
+	username := os.Getenv("POSTGRES_USERNAME")
+	password := os.Getenv("POSTGRES_PASSWORD")
+	dbname := os.Getenv("POSTGRES_DBNAME")
 
-	// To the connectin with the DB
-	db, err := database.ConnDB()
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	defer db.Close()
+	psqlConn := fmt.Sprintf(
+		"postgres://%s:%s@%s:%s/%s",
+		username, password, host, port, dbname)
+	db := database.ConnDB(psqlConn, 10)
 
-	// Query all the values with specified path
-	rows, err := db.Query("SELECT id, path from avatars WHERE path LIKE 'image/%'")
-	if err != nil {
-		fmt.Println(err)
-	}
-	defer rows.Close()
+	var counter int
+	// Comented cause there is to much rows in the table
+	// db.QueryRow(context.Background(), "select count(*) from avatars").Scan(&counter)
+	// fmt.Println("This is the total of rows", counter)
 
-	// Read the rows of the select query and remove the path image
-	var id int
-	var path string
-	var legacyObj = make(map[int]string)
-	for rows.Next() {
-		err = rows.Scan(&id, &path)
-		if err != nil {
-			log.Fatal(err)
-		}
-		objName := strings.TrimPrefix(path, srcPath)
-		legacyObj[id] = objName
-	}
+	counter = 40
+	limit := 10
 
-	// Range all key and values base in the id and path from DB
-	for key, value := range legacyObj {
-		// Concatenate path with the image name
-		objSrcName := (srcPath + value)
-		objDstName := (dstPath + value)
+	// create the channel msg with the avatar type
+	msg := make(chan Avatar)
 
-		// If object didn't exist, copy it to the bucket
-		if obj, _ := s3.ObjExists(dstBucket, objDstName); !obj {
+	// Start a go routine sending an id and a msg to the worker function
+	go worker(1, msg)
+	go worker(2, msg)
 
-			err = s3.CopyObjs(srcBucket, dstBucket, objSrcName, objDstName)
+	for counter > 0 {
+		page := counter / limit
+		offset := limit * (page - 1)
 
-			if err != nil {
-				fmt.Println("Failed to copy the object", err)
-			} else {
-				// Update each success upload in the Postgres with the new path
-				// TODO: Implement a bulk update instead line by line
-				sqlStatement := `UPDATE avatars SET path = $1 WHERE id = $2`
-				_, err = db.Exec(sqlStatement, objDstName, key)
-				if err != nil {
-					log.Panic("Error to insert in the DB", err)
+		SQL := `SELECT "id","path" FROM "avatars" ORDER BY "id" LIMIT $1 OFFSET $2`
 
-				}
+		rows, _ := db.Query(context.Background(), SQL, limit, offset)
+		defer rows.Close()
+
+		var id int
+		var path string
+		for rows.Next() {
+			rows.Scan(&id, &path)
+			// Populate the struct
+			avatar := Avatar{
+				Id:   id,
+				Path: path,
 			}
-
-		} else {
-			log.Printf("Object: %#value already exists\n", objDstName)
+			msg <- avatar // Send each line for the message channel
 		}
-	}
 
+		counter -= limit
+
+		time.Sleep(3 * time.Second)
+
+	}
 }

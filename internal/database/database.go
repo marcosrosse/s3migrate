@@ -1,33 +1,31 @@
 package database
 
 import (
-	"database/sql"
-	"fmt"
-	"os"
+	"context"
+	"log"
+	"time"
 
+	"github.com/jackc/pgx/v5"
 	_ "github.com/lib/pq"
 )
 
 // Connect to the Postgres Database
-func ConnDB() (*sql.DB, error) {
-	host := os.Getenv("POSTGRES_HOST")
-	port := os.Getenv("POSTGRES_PORT")
-	username := os.Getenv("POSTGRES_USERNAME")
-	password := os.Getenv("POSTGRES_PASSWORD")
-	dbname := os.Getenv("POSTGRES_DBNAME")
+func ConnDB(connectionUrl string, retries int) *pgx.Conn {
 
-	psqlConn := fmt.Sprintf(
-		"host=%s port=%s user=%s "+"password=%s dbname=%s sslmode=disable",
-		host, port, username, password, dbname)
+	var db *pgx.Conn
+	var err error
 
-	db, err := sql.Open("postgres", psqlConn)
-	if err != nil {
-		return nil, err
+	db, err = pgx.Connect(context.Background(), connectionUrl)
+	for err != nil {
+		log.Printf("%s\n", err)
+		if retries > 1 {
+			retries--
+			time.Sleep(5 * time.Second)
+			db, err = pgx.Connect(context.Background(), connectionUrl)
+			continue
+		}
+		panic(err)
 	}
 
-	if err = db.Ping(); err != nil {
-		return nil, err
-	}
-
-	return db, err
+	return db
 }
