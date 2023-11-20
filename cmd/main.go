@@ -19,7 +19,8 @@ type Avatar struct {
 }
 
 var (
-	client *s3.S3
+	client           *s3.S3
+	AWS_ENDPOINT_URL = os.Getenv("AWS_ENDPOINT_URL")
 )
 
 func init() {
@@ -28,7 +29,7 @@ func init() {
 			os.Getenv("AWS_ACCESS_KEY_ID"),
 			os.Getenv("AWS_SECRET_ACCESS_KEY"), ""),
 		Region:   aws.String("us-east-2"),
-		Endpoint: aws.String("http://127.0.0.1:9000"),
+		Endpoint: aws.String(AWS_ENDPOINT_URL),
 	})
 	if err != nil {
 		panic(err)
