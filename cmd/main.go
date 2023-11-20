@@ -3,9 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
-	"github.com/marcosrosse/bucket-migration-tool/internal/database"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/marcosrosse/s3migrate/internal/database"
 )
 
 type Avatar struct {
@@ -13,17 +18,54 @@ type Avatar struct {
 	Path string
 }
 
+var (
+	client *s3.S3
+)
+
+func init() {
+	sess, err := session.NewSession(&aws.Config{
+		Credentials: credentials.NewStaticCredentials(
+			os.Getenv("AWS_ACCESS_KEY_ID"),
+			os.Getenv("AWS_SECRET_ACCESS_KEY"), ""),
+		Region:   aws.String("us-east-2"),
+		Endpoint: aws.String("http://127.0.0.1:9000"),
+	})
+	if err != nil {
+		panic(err)
+	}
+	client = s3.New(sess)
+}
+
 // Maybe here will have all the logic
-func worker(workerId int, jobs chan Avatar) {
-	for j := range jobs {
-		fmt.Println("Worker: ", workerId, "jobs: ", j)
+func worker(workerId int, job chan Avatar) {
+	for j := range job {
+		fmt.Println("Worker: ", workerId, "job: ", j)
+
 		time.Sleep(time.Second)
 	}
 
 }
 
+func ListBuckets(client *s3.S3) (*s3.ListBucketsOutput, error) {
+	res, err := client.ListBuckets(nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
 func main() {
 
+	buckets, err := ListBuckets(client)
+	if err != nil {
+		fmt.Printf("Couldn't list buckets: %v", err)
+		return
+	}
+
+	for _, bucket := range buckets.Buckets {
+		fmt.Printf("Found bucket: %s, created at: %s\n", *bucket.Name, *bucket.CreationDate)
+	}
 	db := database.ConnDB()
 
 	var counter int
@@ -32,13 +74,13 @@ func main() {
 
 	limit := 100
 
-	// create the channel jobs with the avatar type
-	jobs := make(chan Avatar, counter)
+	// create the channel job with the avatar type
+	job := make(chan Avatar, counter)
 
-	// Start a go routine sending an id and a jobs to the worker function
+	// Start a go routine sending an id and a job to the worker function
 
 	for w := 1; w <= 10; w++ {
-		go worker(w, jobs)
+		go worker(w, job)
 	}
 
 	for counter > 0 {
@@ -59,7 +101,7 @@ func main() {
 				Id:   id,
 				Path: path,
 			}
-			jobs <- avatar // Send each line for the message channel
+			job <- avatar // Send each line for the message channel
 		}
 
 		counter -= limit

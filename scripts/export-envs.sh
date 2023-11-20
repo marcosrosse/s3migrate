@@ -1,6 +1,8 @@
-echo export S3_ENDPOINT=127.0.0.1:9000
-echo export S3_ACCESS_KEY_ID=minioadmin
-echo export S3_SECRET_ACCESS_KEY=minioadmin
+echo export AWS_ENDPOINT_URL=http://127.0.0.1:9000
+echo export AWS_ACCESS_KEY_ID=minioadmin
+echo export AWS_SECRET_ACCESS_KEY=minioadmin
+echo export AWS_SESSION_TOKEN=""
+echo export AWS_REGION="us-east-2"
 echo export S3_USE_SSL=false
 echo export POSTGRES_HOST=127.0.0.1
 echo export POSTGRES_PORT=5432
