@@ -19,16 +19,19 @@ type Avatar struct {
 }
 
 var (
-	client           *s3.S3
-	AWS_ENDPOINT_URL = os.Getenv("AWS_ENDPOINT_URL")
+	client                *s3.S3
+	AWS_ENDPOINT_URL      = os.Getenv("AWS_ENDPOINT_URL")
+	AWS_ACCESS_KEY_ID     = os.Getenv("AWS_ACCESS_KEY_ID")
+	AWS_SECRET_ACCESS_KEY = os.Getenv("AWS_SECRET_ACCESS_KEY")
+	AWS_REGION            = os.Getenv("AWS_REGION")
 )
 
 func init() {
 	sess, err := session.NewSession(&aws.Config{
 		Credentials: credentials.NewStaticCredentials(
-			os.Getenv("AWS_ACCESS_KEY_ID"),
-			os.Getenv("AWS_SECRET_ACCESS_KEY"), ""),
-		Region:   aws.String("us-east-2"),
+			AWS_ACCESS_KEY_ID,
+			AWS_SECRET_ACCESS_KEY, ""),
+		Region:   aws.String(AWS_REGION),
 		Endpoint: aws.String(AWS_ENDPOINT_URL),
 	})
 	if err != nil {
@@ -37,7 +40,6 @@ func init() {
 	client = s3.New(sess)
 }
 
-// Maybe here will have all the logic
 func worker(workerId int, job chan Avatar) {
 	for j := range job {
 		fmt.Println("Worker: ", workerId, "job: ", j)
@@ -56,6 +58,18 @@ func ListBuckets(client *s3.S3) (*s3.ListBucketsOutput, error) {
 	return res, nil
 }
 
+func ListObjects(client *s3.S3, bucket, object string) (*s3.ListObjectsV2Output, error) {
+	res, err := client.ListObjectsV2(&s3.ListObjectsV2Input{
+		Bucket: aws.String(bucket),
+		Prefix: aws.String(object),
+	})
+	if err != nil {
+		fmt.Println(err)
+	}
+	return res, nil
+
+}
+
 func main() {
 
 	buckets, err := ListBuckets(client)
@@ -63,6 +77,9 @@ func main() {
 		fmt.Printf("Couldn't list buckets: %v", err)
 		return
 	}
+
+	listObjects, _ := ListObjects(client, "legacy-s3", "avatar")
+	fmt.Println(listObjects)
 
 	for _, bucket := range buckets.Buckets {
 		fmt.Printf("Found bucket: %s, created at: %s\n", *bucket.Name, *bucket.CreationDate)
