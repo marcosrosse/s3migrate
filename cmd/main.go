@@ -1,80 +1,130 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"log"
 	"os"
-	"strings"
+	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/marcosrosse/s3migrate/internal/database"
-	"github.com/marcosrosse/s3migrate/internal/s3"
 )
+
+type Avatar struct {
+	Id   int
+	Path string
+}
 
 var (
-	srcBucket = os.Getenv("S3_SRC_BUCKET")
-	dstBucket = os.Getenv("S3_DST_BUCKET")
-	srcPath   = os.Getenv("S3_SRC_PATH_OBJ")
-	dstPath   = os.Getenv("S3_DST_PATH_OBJ")
+	client                *s3.S3
+	AWS_ENDPOINT_URL      = os.Getenv("AWS_ENDPOINT_URL")
+	AWS_ACCESS_KEY_ID     = os.Getenv("AWS_ACCESS_KEY_ID")
+	AWS_SECRET_ACCESS_KEY = os.Getenv("AWS_SECRET_ACCESS_KEY")
+	AWS_REGION            = os.Getenv("AWS_REGION")
 )
 
-func main() {
-	fmt.Println("Starting Job")
+func init() {
+	sess, err := session.NewSession(&aws.Config{
+		Credentials: credentials.NewStaticCredentials(
+			AWS_ACCESS_KEY_ID,
+			AWS_SECRET_ACCESS_KEY, ""),
+		Region:   aws.String(AWS_REGION),
+		Endpoint: aws.String(AWS_ENDPOINT_URL),
+	})
+	if err != nil {
+		panic(err)
+	}
+	client = s3.New(sess)
+}
 
-	// To the connectin with the DB
-	db, err := database.ConnDB()
+func worker(workerId int, job chan Avatar) {
+	for j := range job {
+		fmt.Println("Worker: ", workerId, "job: ", j)
+
+		time.Sleep(time.Second)
+	}
+
+}
+
+func ListBuckets(client *s3.S3) (*s3.ListBucketsOutput, error) {
+	res, err := client.ListBuckets(nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func ListObjects(client *s3.S3, bucket, object string) (*s3.ListObjectsV2Output, error) {
+	res, err := client.ListObjectsV2(&s3.ListObjectsV2Input{
+		Bucket: aws.String(bucket),
+		Prefix: aws.String(object),
+	})
 	if err != nil {
 		fmt.Println(err)
+	}
+	return res, nil
+
+}
+
+func main() {
+
+	buckets, err := ListBuckets(client)
+	if err != nil {
+		fmt.Printf("Couldn't list buckets: %v", err)
 		return
 	}
-	defer db.Close()
 
-	// Query all the values with specified path
-	rows, err := db.Query("SELECT id, path from avatars WHERE path LIKE 'image/%'")
-	if err != nil {
-		fmt.Println(err)
+	listObjects, _ := ListObjects(client, "legacy-s3", "avatar")
+	fmt.Println(listObjects)
+
+	for _, bucket := range buckets.Buckets {
+		fmt.Printf("Found bucket: %s, created at: %s\n", *bucket.Name, *bucket.CreationDate)
 	}
-	defer rows.Close()
+	db := database.ConnDB()
 
-	// Read the rows of the select query and remove the path image
-	var id int
-	var path string
-	var legacyObj = make(map[int]string)
-	for rows.Next() {
-		err = rows.Scan(&id, &path)
-		if err != nil {
-			log.Fatal(err)
-		}
-		objName := strings.TrimPrefix(path, srcPath)
-		legacyObj[id] = objName
+	var counter int
+	db.QueryRow(context.Background(), "select count(*) from avatars").Scan(&counter)
+	defer db.Close(context.Background())
+
+	limit := 100
+
+	// create the channel job with the avatar type
+	job := make(chan Avatar, counter)
+
+	// Start a go routine sending an id and a job to the worker function
+
+	for w := 1; w <= 10; w++ {
+		go worker(w, job)
 	}
 
-	// Range all key and values base in the id and path from DB
-	for key, value := range legacyObj {
-		// Concatenate path with the image name
-		objSrcName := (srcPath + value)
-		objDstName := (dstPath + value)
+	for counter > 0 {
+		page := counter / limit
+		offset := limit * (page - 1)
 
-		// If object didn't exist, copy it to the bucket
-		if obj, _ := s3.ObjExists(dstBucket, objDstName); !obj {
+		SQL := `SELECT "id","path" FROM "avatars" ORDER BY "id" LIMIT $1 OFFSET $2`
 
-			err = s3.CopyObjs(srcBucket, dstBucket, objSrcName, objDstName)
+		rows, _ := db.Query(context.Background(), SQL, limit, offset)
+		defer rows.Close()
 
-			if err != nil {
-				fmt.Println("Failed to copy the object", err)
-			} else {
-				// Update each success upload in the Postgres with the new path
-				// TODO: Implement a bulk update instead line by line
-				sqlStatement := `UPDATE avatars SET path = $1 WHERE id = $2`
-				_, err = db.Exec(sqlStatement, objDstName, key)
-				if err != nil {
-					log.Panic("Error to insert in the DB", err)
-
-				}
+		var id int
+		var path string
+		for rows.Next() {
+			rows.Scan(&id, &path)
+			// Populate the struct
+			avatar := Avatar{
+				Id:   id,
+				Path: path,
 			}
-
-		} else {
-			log.Printf("Object: %#value already exists\n", objDstName)
+			job <- avatar // Send each line for the message channel
 		}
-	}
 
+		counter -= limit
+
+		time.Sleep(3 * time.Second)
+
+	}
 }
